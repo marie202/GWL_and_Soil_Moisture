@@ -1,0 +1,17 @@
+name: gw_hpc_env_minimal
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12.9
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib-base
+  - geopandas
+  - shap
+  - scikit-learn
+  - tensorflow=2.18
+  - keras
+  - bayesian-optimization
+  - uncertainties
