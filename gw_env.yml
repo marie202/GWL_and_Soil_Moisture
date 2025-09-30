@@ -1,4 +1,4 @@
-name: gw_hpc_env_minimal
+name: gw_hpc_env_optuna
 channels:
   - conda-forge
   - defaults
@@ -15,3 +15,8 @@ dependencies:
   - keras
   - bayesian-optimization
   - uncertainties
+
+  # Pip packages
+  - pip
+  - pip:
+      - optuna        # modern optimization framework

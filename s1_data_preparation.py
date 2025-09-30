@@ -46,8 +46,32 @@ def read_and_process_data(file_path, columns_to_keep, target_column="GWL"):
     - Converts 'Date' to datetime and sets as index.
     - Cleans up 'soil_moisture_xy_l10' and 'elevation_msl' columns if present.
     """
-    # Read the CSV file
-    exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0')
+    # Read the CSV file with HPC container compatibility
+    try:
+        # Strategy 1: Standard read
+        exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0')
+    except (OSError, IOError) as e:
+        if "Communication error" in str(e) or "errno 70" in str(e).lower():
+            print(f"🔄 HPC I/O issue for {os.path.basename(file_path)}, trying Python engine...")
+            try:
+                # Strategy 2: Use python engine (slower but more reliable in containers)
+                exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0', engine='python')
+                print(f"✓ Successfully read {os.path.basename(file_path)} using Python engine")
+            except Exception as e2:
+                try:
+                    # Strategy 3: Read without index_col first, then process
+                    exp_data = pd.read_csv(file_path, skipinitialspace=True, engine='python')
+                    if 'Unnamed: 0' in exp_data.columns:
+                        exp_data = exp_data.drop(columns=['Unnamed: 0'])
+                    print(f"✓ Successfully read {os.path.basename(file_path)} using Python engine (no index_col)")
+                except Exception as e3:
+                    print(f"❌ All CSV reading strategies failed for {file_path}")
+                    print(f"❌ Original error: {e}")
+                    print(f"❌ Python engine error: {e2}")  
+                    print(f"❌ Final attempt error: {e3}")
+                    raise e
+        else:
+            raise e
     exp_data['Date'] = pd.to_datetime(exp_data['Date'])
     exp_data.set_index('Date', inplace=True)
     exp_data = exp_data.loc["1991-01-01":"2024-12-31"]
@@ -106,13 +130,32 @@ def scaler_statics_global(input_dir, static_cols, columns_to_keep):
         static_df (pd.DataFrame): Combined static feature values for all wells.
     """
     all_static_data = []
+    files_found = glob.glob(input_dir)
+    print(f"📁 scaler_statics_global: Found {len(files_found)} files with pattern: {input_dir}")
+    
+    if not files_found:
+        raise ValueError(f"No files found with pattern: {input_dir}. Check if the input directory path is correct.")
 
-    for file in glob.glob(input_dir):
-        df = read_and_process_data(file, columns_to_keep)
-        static_row = df[static_cols].iloc[0]
-        all_static_data.append(static_row)
+    for file in files_found:
+        try:
+            df = read_and_process_data(file, columns_to_keep)
+            if df is not None and not df.empty and len(df) > 0:
+                static_row = df[static_cols].iloc[0]
+                all_static_data.append(static_row)
+                print(f"✓ Processed static data from: {os.path.basename(file)}")
+            else:
+                print(f"⚠️ Skipped empty file: {os.path.basename(file)}")
+        except Exception as e:
+            print(f"⚠️ Error processing {os.path.basename(file)}: {e}")
+            continue
 
     static_df = pd.DataFrame(all_static_data)
+    print(f"📊 Created static DataFrame with {len(static_df)} rows and {len(static_df.columns) if not static_df.empty else 0} columns")
+    
+    # Safety check: ensure we have data to fit the scaler
+    if static_df.empty or len(static_df) == 0:
+        raise ValueError(f"No static data available for scaling. All files may have been skipped due to insufficient data. Check if files exist and have enough data for the specified columns: {static_cols}")
+    
     scaler_static = MinMaxScaler()
     scaler_static.fit(static_df)
 
@@ -281,13 +324,24 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
         X_opt_interim, Y_opt_interim = to_sequential(OptData_n, GLOBAL_SETTINGS["window_size"])
         X_test_interim, Y_test_interim = to_sequential(TestData_n, GLOBAL_SETTINGS["window_size"])
 
-        # Append to training arrays
-        X_train = np.concatenate((X_train, X_train_interim), axis=0)
-        Y_train = np.concatenate((Y_train, Y_train_interim), axis=0)
-        X_val = np.concatenate((X_val, X_val_interim), axis=0)
-        Y_val = np.concatenate((Y_val, Y_val_interim), axis=0)
-        X_opt = np.concatenate((X_opt, X_opt_interim), axis=0)
-        Y_opt = np.concatenate((Y_opt, Y_opt_interim), axis=0)
+        # Append to training arrays (with dimension safety checks)
+        if X_train_interim.size > 0 and X_train_interim.ndim == 3:
+            X_train = np.concatenate((X_train, X_train_interim), axis=0)
+            Y_train = np.concatenate((Y_train, Y_train_interim), axis=0)
+        else:
+            print(f"⚠️  Skipping {well_id} train data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            
+        if X_val_interim.size > 0 and X_val_interim.ndim == 3:
+            X_val = np.concatenate((X_val, X_val_interim), axis=0)
+            Y_val = np.concatenate((Y_val, Y_val_interim), axis=0)
+        else:
+            print(f"⚠️  Skipping {well_id} val data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            
+        if X_opt_interim.size > 0 and X_opt_interim.ndim == 3:
+            X_opt = np.concatenate((X_opt, X_opt_interim), axis=0)
+            Y_opt = np.concatenate((Y_opt, Y_opt_interim), axis=0)
+        else:
+            print(f"⚠️  Skipping {well_id} opt data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
 
         # Save to dictionaries
 
@@ -304,6 +358,14 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
         TestData_dict[f'obs_Dataframe_{well_id}'] = TestData
         TestData_dict[f'X_test_{well_id}'] = X_test_interim
         TestData_dict[f'Y_test_{well_id}'] = Y_test_interim
+
+    # Final safety check - ensure we have enough data for training
+    if X_train.shape[0] == 0:
+        raise ValueError(f"No training data available after processing. Window size {GLOBAL_SETTINGS['window_size']} might be too large for the available data.")
+    if X_val.shape[0] == 0:
+        raise ValueError(f"No validation data available after processing. Window size {GLOBAL_SETTINGS['window_size']} might be too large for the available data.")
+        
+    print(f"✓ Data pipeline completed: Train={X_train.shape}, Val={X_val.shape}, Opt={X_opt.shape}")
 
     return X_train, Y_train, X_val, Y_val, X_opt, Y_opt, ScalerData_dict, ValData_dict, OptData_dict, TestData_dict
 

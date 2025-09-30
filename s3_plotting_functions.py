@@ -400,6 +400,179 @@ def compute_and_save_shap_values(median_model, X_train, X_test_all, model_dir, c
     
     return shap_vals, X_test_last
 
+
+import numpy as np
+import shap
+import os
+import logging
+from sklearn.cluster import KMeans
+
+def save_shap_to_file(shap_vals, input_data, output_path):
+    """Save SHAP values and input data to a text file"""
+    with open(output_path, "w") as f:
+        f.write('shap_vals\n')
+        for row in shap_vals:
+            f.write(' '.join(map(str, row)) + '\n')
+        f.write('input_data\n')
+        for row in input_data:
+            f.write(' '.join(map(str, row)) + '\n')
+
+
+
+def compute_and_save_shap_values_robust(median_model, X_train, X_test_all, model_dir, columns_to_keep, 
+                                       nsamples=100, background_size=100, use_kmeans_background=True, 
+                                       hide_logging=True, stability_check=True):
+    """
+    Computes SHAP values for the given model and test set with improved numerical stability.
+    
+    Args:
+        median_model: Trained Keras model.
+        X_train: Training data (background for SHAP).
+        X_test_all: Test data to explain.
+        model_dir: Directory to save the output file.
+        columns_to_keep: List of feature names.
+        nsamples: Number of samples for SHAP computation.
+        background_size: Size of background dataset.
+        use_kmeans_background: Whether to use k-means clustering for background selection.
+        hide_logging: Whether to hide verbose SHAP logging.
+        stability_check: Whether to perform stability checks on SHAP values.
+    """
+    
+    # Hide verbose output from SHAP KernelExplainer only if hide_logging is True
+    if hide_logging:
+        logging.getLogger("shap").setLevel(logging.ERROR)
+        logging.getLogger("shap.common").setLevel(logging.ERROR)
+        logging.getLogger("shap.explainers").setLevel(logging.ERROR)
+        logging.getLogger("shap.explainers._kernel").setLevel(logging.ERROR)
+
+    print(f"Computing SHAP values for {X_test_all.shape[0]} samples with {X_test_all.shape[2]} features")
+    
+    # Extract last time step for SHAP analysis
+    X_test_last = X_test_all[:, -1, :]  # shape: (samples, features)
+    X_train_last = X_train[:, -1, :]    # shape: (samples, features)
+    
+    # Create a more representative background dataset
+    if use_kmeans_background and X_train_last.shape[0] > background_size:
+        print(f"Using k-means clustering to select {background_size} representative background samples")
+        kmeans = KMeans(n_clusters=background_size, random_state=42, n_init=10)
+        kmeans.fit(X_train_last)
+        background_last = kmeans.cluster_centers_
+    else:
+        # Use random sampling for background
+        background_indices = np.random.choice(X_train_last.shape[0], 
+                                            min(background_size, X_train_last.shape[0]), 
+                                            replace=False)
+        background_last = X_train_last[background_indices]
+    
+    print(f"Background dataset shape: {background_last.shape}")
+    
+    # Create a more stable prediction function
+    def stable_predict(x):
+        """Wrapper for model prediction with numerical stability checks"""
+        try:
+            # Reshape input for LSTM model
+            x_reshaped = x.reshape((x.shape[0], 1, x.shape[1]))
+            
+            # Clip input to reasonable range to prevent numerical issues
+            x_clipped = np.clip(x_reshaped, -10, 10)
+            
+            # Make prediction
+            pred = median_model.predict(x_clipped, verbose=0)
+            
+            # Check for numerical issues in predictions
+            if np.any(np.isnan(pred)) or np.any(np.isinf(pred)):
+                print(f"WARNING: Found NaN/inf in predictions, replacing with zeros")
+                pred = np.nan_to_num(pred, nan=0.0, posinf=0.0, neginf=0.0)
+            
+            return pred
+            
+        except Exception as e:
+            print(f"ERROR in prediction function: {e}")
+            # Return zeros as fallback
+            return np.zeros((x.shape[0], 1))
+    
+    # Test the prediction function with background data
+    print("Testing prediction function stability...")
+    test_pred = stable_predict(background_last[:5])
+    print(f"Test prediction shape: {test_pred.shape}, range: [{test_pred.min():.6f}, {test_pred.max():.6f}]")
+    
+    # Create SHAP explainer with improved settings
+    print("Creating SHAP explainer...")
+    explainer = shap.KernelExplainer(stable_predict, background_last)
+    
+    # Compute SHAP values with smaller batches to avoid memory/numerical issues
+    batch_size = min(1000, X_test_last.shape[0])  # Process in batches
+    all_shap_values = []
+    
+    print(f"Computing SHAP values in batches of {batch_size}...")
+    for i in range(0, X_test_last.shape[0], batch_size):
+        end_idx = min(i + batch_size, X_test_last.shape[0])
+        batch_data = X_test_last[i:end_idx]
+        
+        print(f"Processing batch {i//batch_size + 1}/{(X_test_last.shape[0] + batch_size - 1)//batch_size}")
+        
+        try:
+            # Compute SHAP values for this batch
+            batch_shap = explainer.shap_values(batch_data, nsamples=nsamples, silent=True)
+            
+            # Handle different SHAP output formats
+            if isinstance(batch_shap, list):
+                batch_shap = batch_shap[0]  # Take first output for regression
+            
+            # Remove extra dimensions if present
+            if len(batch_shap.shape) > 2:
+                batch_shap = batch_shap[:, :, 0] if batch_shap.shape[2] == 1 else batch_shap.reshape(batch_shap.shape[0], -1)
+            
+            all_shap_values.append(batch_shap)
+            
+        except Exception as e:
+            print(f"ERROR computing SHAP values for batch {i//batch_size + 1}: {e}")
+            # Create zero SHAP values as fallback
+            fallback_shap = np.zeros((batch_data.shape[0], batch_data.shape[1]))
+            all_shap_values.append(fallback_shap)
+    
+    # Concatenate all batches
+    shap_vals = np.concatenate(all_shap_values, axis=0)
+    
+    print(f"Final SHAP values shape: {shap_vals.shape}")
+    print(f"SHAP values range: [{shap_vals.min():.2e}, {shap_vals.max():.2e}]")
+    
+    # Stability check
+    if stability_check:
+        extreme_mask = np.abs(shap_vals) > 1.0  # Flag values > 1.0 as potentially problematic
+        n_extreme = np.sum(extreme_mask)
+        
+        if n_extreme > 0:
+            print(f"WARNING: Found {n_extreme} potentially extreme SHAP values (>1.0)")
+            
+            # Option to clip extreme values
+            shap_vals_clipped = np.clip(shap_vals, -1.0, 1.0)
+            
+            # Save both original and clipped versions
+            output_path_original = os.path.join(model_dir, "shapvalues_original.txt")
+            output_path_clipped = os.path.join(model_dir, "shapvalues_robust.txt")
+            
+            # Save original
+            save_shap_to_file(shap_vals, X_test_last, output_path_original)
+            print(f"Original SHAP values saved to: {output_path_original}")
+            
+            # Save clipped version
+            save_shap_to_file(shap_vals_clipped, X_test_last, output_path_clipped)
+            print(f"Robust (clipped) SHAP values saved to: {output_path_clipped}")
+            
+            return shap_vals_clipped, X_test_last
+        else:
+            print("SHAP values appear stable (no extreme values found)")
+    
+    # Save to file
+    output_path = os.path.join(model_dir, "shapvalues_improved.txt")
+    save_shap_to_file(shap_vals, X_test_last, output_path)
+    print(f"SHAP values saved to: {output_path}")
+    
+    return shap_vals, X_test_last
+
+
+
 # example usage
 # shap_vals, X_test_last = compute_and_save_shap_values(
 #     median_model=median_model,
@@ -433,12 +606,14 @@ def compute_and_save_shap_values(median_model, X_train, X_test_all, model_dir, c
 # #plt.close()   
 # plt.show()
 
-def plot_shap_from_txt(txt_path, columns_to_keep, show_plot=True):
+def plot_shap_from_txt(txt_path, columns_to_keep, model_dir, custom_labels=None, show_plot=True):
     """
     Loads SHAP values and input data from a .txt file and plots a SHAP summary plot.
     Args:
         txt_path: Path to the .txt file containing SHAP values and input data.
         columns_to_keep: List of feature names.
+        model_dir: Directory where the plot will be saved.
+        custom_labels: List of custom y-axis labels for the SHAP plot (optional).
         show_plot: Whether to display the plot (default: True).
     """
     import shap  # For SHAP values
@@ -455,8 +630,12 @@ def plot_shap_from_txt(txt_path, columns_to_keep, show_plot=True):
     input_data = np.array([list(map(float, line.strip().split())) for line in input_lines])
     # Plot
     try:
-        shap.summary_plot(shap_vals, input_data, feature_names=columns_to_keep, show=False)
+        feature_names = custom_labels if custom_labels is not None else columns_to_keep
+        shap.summary_plot(shap_vals, input_data, feature_names=feature_names, show=False)
         plt.xlabel("SHAP value", fontsize=15)
+        # Make horizontal grid lines dotted and linewidth 1
+        ax = plt.gca()
+        ax.yaxis.grid(True, linestyle=':', linewidth=1)
         plt.savefig(f"{model_dir}/shap_values_plot.png", dpi=300)
         if show_plot:
             plt.show()
@@ -466,9 +645,51 @@ def plot_shap_from_txt(txt_path, columns_to_keep, show_plot=True):
 
 
 
-# example usage
-# plot_shap_from_txt(
-#     txt_path=os.path.join(model_dir, f"shapvalues.txt"),
-#     columns_to_keep=columns_to_keep,
-#     show_plot=True
-# )
+def plot_r2_rmse_boxplots(df, model_dir, fontsize=16, show_plot=False):
+    """
+    Plots boxplots for R2 and RMSE from a scores DataFrame and saves the figure.
+    Args:
+        df (pd.DataFrame): DataFrame with 'R2' and 'RMSE' columns.
+        model_dir (str): Directory to save the plot.
+        fontsize (int): Font size for plot labels.
+        show_plot (bool): Whether to display the plot with plt.show().
+    """
+    import seaborn as sns
+    fig, ax = plt.subplots(1, 2, figsize=(8, 5))
+
+    # R2 boxplot
+    sns.boxplot(
+        y=df['R2'], width=0.5, color="#FFD7DF",
+        ax=ax[0],
+        boxprops=dict(edgecolor="black", linewidth=1.5),
+        whiskerprops=dict(color="black", linewidth=1.5),
+        capprops=dict(color="black", linewidth=1.5),
+        medianprops=dict(color="#244062", linewidth=2)
+    )
+    # Show R2 summary statistics on the plot
+    s = f"R2 \nmedian = {round(df['R2'].median(),2)}\nmax = {round(df['R2'].max(),2)}\nmin = {round(df['R2'].min(),2)}"
+    ax[0].text(0.6, -0.025, s, bbox=dict(facecolor='white'), fontsize=fontsize)
+    ax[0].set_ylabel("R2", fontsize=fontsize)
+    ax[0].tick_params(axis='both', labelsize=fontsize-2)
+
+    # RMSE boxplot
+    sns.boxplot(
+        y=df['RMSE'], width=0.5, color="#FFD7DF",
+        ax=ax[1],
+        boxprops=dict(edgecolor="black", linewidth=1.5),
+        whiskerprops=dict(color="black", linewidth=1.5),
+        capprops=dict(color="black", linewidth=1.5),
+        medianprops=dict(color="#244062", linewidth=2)
+    )
+    # Show RMSE summary statistics on the plot
+    s = f"RMSE \nmedian = {round(df['RMSE'].median(),2)}\nmax = {round(df['RMSE'].max(),2)}\nmin = {round(df['RMSE'].min(),2)}"
+    ax[1].text(0.6, 0.035, s, bbox=dict(facecolor='white'), fontsize=fontsize)
+    ax[1].set_ylabel("RMSE", fontsize=fontsize)
+    ax[1].tick_params(axis='both', labelsize=fontsize-2)
+
+    plt.tight_layout()
+    plt.savefig(f"{model_dir}/boxplot_r2_rmse.png", dpi=300)
+    if show_plot:
+        plt.show()
+    plt.close()
+

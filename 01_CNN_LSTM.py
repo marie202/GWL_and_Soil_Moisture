@@ -106,7 +106,7 @@ GLOBAL_SETTINGS = {
     'test_end': pd.to_datetime('2024-09-01', format='%Y-%m-%d'),
     'num_cnn_layers': 5,
     'lstm_units': [32, 16], #[32, 16],
-    'model_dir_note': "L2_1e5_LSTM32_16_bester_run_new_NS_and_kf_filtered_new_scalerlogic_ini10_204files"
+    'model_dir_note': "AllFeat_SM_ini2_217files_10ini"
 }
 
 
@@ -123,7 +123,7 @@ columns_to_keep = [
     'elevation_msl',
     'MW_muGOK',
     'distance_to_waterwork_km',
-    'kf_remapped',
+    'kf_remap_number',
     'GWL'
 ]
 print("Columns to train on: ", columns_to_keep)
@@ -133,7 +133,7 @@ static_cols = [
     'elevation_msl',
     'MW_muGOK',
     'distance_to_waterwork_km',
-    'kf_remapped',
+    'kf_remap_number',
     ] 
 
 
@@ -421,13 +421,17 @@ print("Max:", df['RMSE'].max())
 # Load scores DataFrame for plotting
 df = pd.read_csv(os.path.join(model_dir, "scores_df.csv"))
 
-# Plot R² and RMSE boxplots
-# plot_r2_rmse_boxplots(
-#     df,
-#     model_dir, 
-#     fontsize=16, 
-#     show_plot=True
-# )
+try:
+    # Plot R2 and RMSE boxplots
+    plot_r2_rmse_boxplots(
+        df,
+        model_dir, 
+        fontsize=16, 
+        show_plot=True
+    )
+    pass
+except Exception as e:
+    print(f"An error occurred while plotting R² and RMSE boxplots: {e}")
 
 # --- Evaluation: Feature Importance and SHAP values ---
 
@@ -459,24 +463,61 @@ feature_importance(
 
 
 
-shap_vals, X_test_last = compute_and_save_shap_values(
+
+shap_vals, X_test_last = compute_and_save_shap_values_robust(
     median_model=median_model,
     X_train=X_train,
     X_test_all=X_test_all,
     model_dir=model_path,
-    nsamples=10, #100 # You can omit this to use the default
     columns_to_keep=columns_to_keep,
-    hide_logging=True
+    nsamples=100,  # Number of samples for SHAP computation
+    background_size=100,  # Size of background dataset (k-means centers)
+    use_kmeans_background=True,  # Use k-means for better background selection
+    hide_logging=True,
+    stability_check=True  # Enable automatic clipping of extreme values
 )
 
 try:
+    custom_labels_11 = [
+        'T',                    # Temperature
+        'P',                    # Precipitation
+        "rH",                   # Relative Humidity 
+        'SM 0-30cm',            # Soil Moisture (0-30cm)
+        'SM 0-60cm',            # Soil Moisture (0-60cm)
+        'SM 0-90cm',            # Soil Moisture (0-90cm)
+        'Elev',                 # Elevation
+        'GWT',                  # Groundwater Table depth
+        'DistWW',               # Distance to Waterworks
+        'kf',                   # Hydraulic conductivity
+    ]
+
+    custom_labels_8 = [
+        'T',                    # Temperature
+        'P',                    # Precipitation
+        "rH",                   # Relative Humidity 
+        'Elev',                 # Elevation
+        'GWT',                  # Groundwater Table depth
+        'DistWW',               # Distance to Waterworks
+        'kf',                   # Hydraulic conductivity
+    ]
+
+    if len(columns_to_keep) == 11:
+        custom_labels = custom_labels_11
+    elif len(columns_to_keep) == 8:
+        custom_labels = custom_labels_8
+    else:
+        custom_labels = None  # Or raise an error if you want to enforce only these two cases
+
     plot_shap_from_txt(
         txt_path=os.path.join(model_dir, f"shapvalues.txt"),
-        columns_to_keep=columns_to_keep,
-        show_plot=True
+        columns_to_keep=[col for col in columns_to_keep if "GWL" not in col],
+        model_dir=model_dir,
+        custom_labels=custom_labels,
+        show_plot=True,
     )
 except Exception as e:
     print(f"[WARNING] Plotting error in plot_shap_from_txt: {e}")
+
 
 # --- If there is a direct SHAP plotting block, wrap it as well ---
 # Example:

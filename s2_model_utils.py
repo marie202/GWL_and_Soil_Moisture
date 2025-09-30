@@ -434,3 +434,106 @@ def simulate_testset(
         sim_members, sim_members_uncertainty, sim_mean_uncertainty,
         final_loss, final_val_loss, val_loss_final_epoch
     )
+
+
+# Helper script to load optimization results
+# This shows how to use the saved optimization results in another script
+
+import os
+import json
+import pickle
+import pandas as pd
+
+def load_optimization_results(model_dir):
+    """
+    Load optimization results from the specified model directory.
+    
+    Args:
+        model_dir (str): Path to the model directory containing saved results
+        
+    Returns:
+        dict: Dictionary containing all optimization results
+    """
+    
+    # Load the full optimization results (pickle format)
+    pickle_file_path = os.path.join(model_dir, 'optimization_results.pkl')
+    if os.path.exists(pickle_file_path):
+        with open(pickle_file_path, 'rb') as f:
+            results = pickle.load(f)
+        print(f"Loaded full optimization results from {pickle_file_path}")
+        return results
+    else:
+        print(f"Pickle file not found: {pickle_file_path}")
+        return None
+
+def load_best_params(model_dir):
+    """
+    Load only the best parameters in a simple format.
+    
+    Args:
+        model_dir (str): Path to the model directory containing saved results
+        
+    Returns:
+        dict: Dictionary containing best parameters
+    """
+    
+    # Load simple best parameters (JSON format)
+    simple_params_file = os.path.join(model_dir, 'best_params.json')
+    if os.path.exists(simple_params_file):
+        with open(simple_params_file, 'r') as f:
+            best_params = json.load(f)
+        print(f"Loaded best parameters from {simple_params_file}")
+        return best_params
+    else:
+        print(f"Best params file not found: {simple_params_file}")
+        return None
+
+def load_optimizer(model_dir):
+    """
+    Load the full optimizer object (useful for resuming optimization).
+    
+    Args:
+        model_dir (str): Path to the model directory containing saved results
+        
+    Returns:
+        BayesianOptimization: The saved optimizer object
+    """
+    
+    optimizer_file_path = os.path.join(model_dir, 'optimizer.pkl')
+    if os.path.exists(optimizer_file_path):
+        with open(optimizer_file_path, 'rb') as f:
+            optimizer = pickle.load(f)
+        print(f"Loaded optimizer from {optimizer_file_path}")
+        return optimizer
+    else:
+        print(f"Optimizer file not found: {optimizer_file_path}")
+        return None
+
+def print_optimization_summary(results):
+    """
+    Print a summary of the optimization results.
+    
+    Args:
+        results (dict): Optimization results dictionary
+    """
+    if results is None:
+        print("No results to display")
+        return
+        
+    print("\n=== OPTIMIZATION SUMMARY ===")
+    print(f"Timestamp: {results.get('timestamp', 'N/A')}")
+    print(f"Model directory: {results.get('model_dir', 'N/A')}")
+    print(f"Best score: {results.get('best_score', 'N/A')}")
+    
+    best_params = results.get('best_params', {})
+    print("\nBest parameters:")
+    for param, value in best_params.items():
+        print(f"  {param}: {value}")
+    
+    print(f"\nNumber of optimization iterations: {len(results.get('optimization_history', []))}")
+    
+    # Show bounds used
+    bounds = results.get('bounds', {})
+    print("\nParameter bounds used:")
+    for param, bound in bounds.items():
+        print(f"  {param}: {bound}")

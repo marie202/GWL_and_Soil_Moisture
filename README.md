@@ -1,30 +1,43 @@
 
 # Groundwater Level and Soil Moisture Modeling with Deep Learning
 
-This repository implements a deep learning-based approach to simulate and analyze long-term groundwater level (GWL) dynamics, leveraging soil moisture and climate data. The modeling is inspired by [Wunsch et al. (2022)](https://doi.org/10.1038/s41467-022-28770-2) and utilizes a Convolutional Neural Network (CNN) and Long Short-Term Memory (LSTM) hybrid architecture for time series prediction.
+This repository implements a deep learning-based approach to simulate and analyze long-term groundwater level (GWL) dynamics, leveraging soil moisture and climate data, and static parameters. 
+The modeling is inspired by [Wunsch et al. (2022)](https://doi.org/10.1038/s41467-022-28770-2) and utilizes a Convolutional Neural Network (CNN) and Long Short-Term Memory (LSTM) hybrid architecture for time series prediction.
 
-[Andreas Wunsch – Long-Term GWL Simulations](https://github.com/AndreasWunsch/Long-Term-GWL-Simulations)
+
+doi of [Groundwater Level Data – Brandenburg, Germany (Zenodo)](https://doi.org/10.5281/zenodo.17233232)
+
+---
+## Author & Contact
+
+**Marie-Christin Eckert**  
+*Groundwater modeling and data science enthusiast*  
+Feel free to reach out or collaborate via [LinkedIn](https://www.linkedin.com/in/marie-christin-eckert-16a4ba29a) or [email](mailto:m.eckert@tu-berlin.de)
+
+ORCIDs of authors:
+* M.-C. Eckert: [0009-0005-4003-6416](https://orcid.org/0009-0005-4003-6416)
+* A. Rudolph: [0000-0002-7368-5018](https://orcid.org/0000-0002-7368-5018)
 
 ---
 
 ## Project Structure
 
 ```
-
-GWL\_and\_Soil\_Moisture/
+GWL_and_Soil_Moisture/
 │
-├── 01\_CNN\_LSTM.py               # Main model training script
-├── 02\_optihyperparams.py        # Hyperparameter optimization using Bayesian search
+├── 01_CNN_LSTM.py                    # Main model training script
+├── 02_opti_hyperparams_optuna.py    # Hyperparameter optimization using Optuna
 │
-├── s1\_data\_preparation.py       # Data loading and preprocessing utilities
-├── s2\_model\_utils.py            # Model architecture and training helper functions
-├── s3\_plotting\_functions.py     # Functions for evaluation and visualization
-├── s4\_bayesian\_opt.py           # Bayesian Optimization helper functions
+├── s1_data_preparation.py           # Data loading and preprocessing utilities
+├── s2_model_utils.py                # Model architecture and training helper functions
+├── s3_plotting_functions.py         # Functions for evaluation and visualization
+├── s4_bayesian_opt.py               # Bayesian optimization helper functions
+├── s5_optuna_opt.py                 # Optuna optimization utilities
 │
-├── gw\_hpc\_env\_minimal.yml       # Conda environment file with dependencies
-└── README.md                    # Project overview
-
-````
+├── gw_env.yml                       # Conda environment file with dependencies
+├── LICENSE                          # MIT License
+└── README.md                        # Project overview
+```
 
 
 ## Environment Setup
@@ -32,24 +45,25 @@ GWL\_and\_Soil\_Moisture/
 This project uses **Python 3.12.9**. All dependencies can be installed via the provided conda environment file.
 
 ```bash
-conda env create -f gw_hpc_env_minimal.yml
-conda activate gw_hpc_env
-````
+conda env create -f gw_env.yml
+conda activate gw_env
+```
 
 ---
 
 ## Key Libraries Used
 
-* **TensorFlow** & **Keras** 
-* **NumPy**, **Unumpy**
-* **pandas** 
-* **scikit-learn** 
-* **Matplotlib**, **seaborn** 
-* **Bayesian Optimization** 
-* **SHAP** 
-* **SciPy** 
+* **TensorFlow** & **Keras** - Deep learning framework
+* **NumPy**, **Unumpy** - Numerical computing and uncertainty propagation
+* **pandas** - Data manipulation and analysis
+* **scikit-learn** - Machine learning utilities
+* **Matplotlib**, **seaborn** - Data visualization
+* **Optuna** - Hyperparameter optimization framework
+* **Bayesian Optimization** - Alternative optimization approach
+* **SHAP** - Model interpretability and feature importance
+* **SciPy** - Scientific computing 
 
-> See full list in [`gw_hpc_env_minimal.yml`](gw_hpc_env_minimal.yml)
+> See full list in [`gw_env.yml`](gw_env.yml)
 
 ---
 
@@ -62,17 +76,12 @@ conda activate gw_hpc_env
    python 01_CNN_LSTM.py
    ```
 
-2. **Optimize hyperparameters**
-   Run the optimizer:
-
+2. **Optimize hyperparameters : Optuna optimization**
    ```bash
-   python 02_optihyperparams.py
+   python 02_opti_hyperparams_optuna.py
    ```
 
-The utility scripts (`s1-s4`) are imported and used within the main scripts. 
-
-
-
+The utility scripts (`s1-s5`) contain modular functions that are imported and used within the main scripts. 
 
 ---
 
@@ -82,9 +91,42 @@ This project is open-source under the [MIT License](LICENSE). Credit is due to t
 
 ---
 
-## Author
+## Data Avaibality
 
-**Marie-Christin Eckert**
-*Groundwater modeling and data science enthusiast*
-Feel free to reach out or collaborate via [LinkedIn](www.linkedin.com/in/marie-christin-eckert-16a4ba29a) or [email](mailto:m.eckert@tu-berin.de)
 
+### Groundwater Level Data
+
+- **Processed groundwater level (GWL) time series** from **217 monitoring wells** across Brandenburg, Germany.
+- Original data source: [LfU Brandenburg Auskunftsplattform Wasser](https://apw.brandenburg.de).
+- Data were interpolated and processed for research applications.
+- The original groundwater level data are available free of charge from LfU Brandenburg.
+- The processed and interpolated groundwater level time series are published with permission from the local authorities:  
+  [https://doi.org/10.5281/zenodo.17233232](https://doi.org/10.5281/zenodo.17233232)
+
+### Model Input Data
+
+All other input datasets required to train the models are available online from the following sources:
+
+- **Soil Moisture Data**  
+  DWD (2024a). Daily grids of mean soil moisture under predominant land use for Germany v1.0 [Dataset].  
+  [https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/soil_moisture/composite/](https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/soil_moisture/composite/)
+
+- **Climate Data**  
+  - *Relative Humidity*:  
+    DWD (2024b). Raster data set of mean relative humidity in % for Germany - HYRAS-DE-HURS, version v6.0 [Dataset].  
+    [https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/hyras_de/humidity/](https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/hyras_de/humidity/)
+  - *Temperature*:  
+    DWD (2024c). Raster data set of mean temperature for Germany - HYRAS-DE-TAS, version v6.0 [Dataset].  
+    [https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/hyras_de/air_temperature_mean/](https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/hyras_de/air_temperature_mean/)
+  - *Precipitation*:  
+    DWD (2024d). Raster data set of precipitation sums in mm for Germany - HYRAS-DE-PR, version v6.0 [Dataset].  
+    [https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/hyras_de/precipitation/](https://opendata.dwd.de/climate_environment/CDC/grids_germany/daily/hyras_de/precipitation/)
+
+- **Static Parameters**
+   - *Elevation, Distance to Waterworks, Groundwater Table Depth*
+    LfU (2025a). Auskunftsplattform Wasser. Grundwasserstand (gesamt) [Dataset].  
+    [https://apw.brandenburg.de](https://apw.brandenburg.de)
+
+   - *Hydraulic Conductivity (kf) Values*  
+    Bundesanstalt für Geowissenschaften und Rohstoffe (BGR) & Staatliche Geologische Dienste (SGD): Hydrogeologische Übersichtskarte von Deutschland 1:250,000 (HÜK250). Digitaler Datenbestand, Version 1.0.3 [Dataset], 2019.  
+    [https://download.bgr.de/bgr/grundwasser/huek250/shp/huek250.zip](https://download.bgr.de/bgr/grundwasser/huek250/shp/huek250.zip)
