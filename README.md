@@ -2,7 +2,7 @@
 # Groundwater Level and Soil Moisture Modeling with Deep Learning
 
 This repository implements a deep learning-based approach to simulate and analyze long-term groundwater level (GWL) dynamics, leveraging soil moisture and climate data, and static parameters. 
-The modeling is inspired by [Wunsch et al. (2022)](https://doi.org/10.1038/s41467-022-28770-2) and utilizes a Convolutional Neural Network (CNN) and Long Short-Term Memory (LSTM) hybrid architecture for time series prediction.
+The model utilizes a Convolutional Neural Network (CNN) and Long Short-Term Memory (LSTM) hybrid architecture for time series prediction.
 
 
 doi of [Groundwater Level Data – Brandenburg, Germany (Zenodo)](https://doi.org/10.5281/zenodo.17233232)
@@ -12,7 +12,7 @@ doi of [Groundwater Level Data – Brandenburg, Germany (Zenodo)](https://doi.or
 
 **Marie-Christin Eckert**  
 *Groundwater modeling and data science enthusiast*  
-Feel free to reach out or collaborate via [LinkedIn](https://www.linkedin.com/in/marie-christin-eckert-16a4ba29a) or [email](mailto:m.eckert@tu-berlin.de)
+Feel free to reach out via [LinkedIn](https://www.linkedin.com/in/marie-christin-eckert-16a4ba29a) or [email](mailto:m.eckert@tu-berlin.de)
 
 ORCIDs of authors:
 * M.-C. Eckert: [0009-0005-4003-6416](https://orcid.org/0009-0005-4003-6416)
