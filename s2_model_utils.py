@@ -78,18 +78,6 @@ def build_cnn_lstm_model(ini, GLOBAL_SETTINGS, X_train, Y_train, X_val, Y_val):
             x = tf.keras.layers.Dropout(0.1)(x)  # Dropout for regularization
     
 
-
-    # Additional pooling and dropout for further regularization
-   # x = tf.keras.layers.MaxPool1D(padding='same')(x)
-    #x = tf.keras.layers.Dropout(0.5)(x)
-    # (Optional: BatchNorm, more Dropout, or GlobalAveragePooling can be tried for further regularization)
-
-    # Add LSTM layers to capture temporal dependencies in the sequence data
-    # x = tf.keras.layers.LSTM(32, return_sequences=True,  kernel_regularizer=tf.keras.regularizers.l2(1e-4) )(x)  # First LSTM layer
-    # x = tf.keras.layers.Dropout(0.2)(x)
-    # x = tf.keras.layers.LSTM(16, return_sequences=False,  kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)  # Second LSTM layer
-    # x = tf.keras.layers.Dropout(0.2)(x)
-
     x = tf.keras.layers.LSTM(
         GLOBAL_SETTINGS["lstm_units"][0],
         return_sequences=True,
@@ -127,12 +115,6 @@ def build_cnn_lstm_model(ini, GLOBAL_SETTINGS, X_train, Y_train, X_val, Y_val):
         clipnorm=GLOBAL_SETTINGS["clip_norm"]
     )
     
-
-    # optimizer = tf.keras.optimizers.Adam(
-    #     learning_rate=GLOBAL_SETTINGS["learning_rate"],
-    #     epsilon=1e-3, 
-    #     clipnorm=GLOBAL_SETTINGS["clip_norm"]
-    # )
     model.compile(loss='mse', optimizer=optimizer, metrics=['mse'])
 
     # Early stopping to prevent overfitting (restores best weights)
@@ -156,133 +138,6 @@ def build_cnn_lstm_model(ini, GLOBAL_SETTINGS, X_train, Y_train, X_val, Y_val):
     
     return model, history
 
-
-# def build_cnn_lstm_model(ini, GLOBAL_SETTINGS, X_train, Y_train, X_val, Y_val):
-#     """
-#     Build and train a CNN-LSTM model for groundwater level prediction.
-#     The architecture is dynamically controlled by GLOBAL_SETTINGS.
-#     Combines CNN layers for feature extraction and LSTM layers for temporal dependencies.
-#     inspired by Wunsch et al 2022 on github https://github.com/AndreasWunsch/Long-Term-GWL-Simulations
-
-#     Parameters:
-#     - ini: random seed initialization (for reproducibility)
-#     - GLOBAL_SETTINGS: dict with model hyperparameters
-#     - X_train, Y_train: training data
-#     - X_val, Y_val: validation data
-
-#     Returns:
-#     - model: Trained Keras model
-#     - history: Training history object
-#     """
-    
-#     # Set random seed for reproducibility
-#     seed(ini + 872527)
-#     tf.random.set_seed(ini + 87747)
-
-#     # Define input layer
-#     inp = tf.keras.Input(shape=(GLOBAL_SETTINGS["window_size"], X_train.shape[2]))
-    
-#     #  CNN + LSTM layers setup
-#     x = inp
-#     for i in range(GLOBAL_SETTINGS["num_cnn_layers"]):
-#         x = tf.keras.layers.Conv1D(
-#             filters=GLOBAL_SETTINGS["filters"],
-#             kernel_size=GLOBAL_SETTINGS["kernel_size"],
-#             activation='relu',
-#             padding='same',
-#             kernel_regularizer=tf.keras.regularizers.l2(1e-4)  # L2 regularization to prevent overfitting
-#         )(x)
-#         x = tf.keras.layers.BatchNormalization()(x)  # Normalize activations for stable training
-        
-#         # Apply MaxPooling every other layer only
-#         if i % 2 == 0:
-#             x = tf.keras.layers.MaxPool1D(padding='same')(x)
-
-        
-#         #x = tf.keras.layers.MaxPool1D(padding='same')(x)  # Downsample feature maps
-#         x = tf.keras.layers.Dropout(0.1)(x)  # Dropout for regularization
-    
-#     # Replace final pooling and dropout with GlobalAveragePooling
-#     x = tf.keras.layers.GlobalAveragePooling1D()(x)
-#     x = tf.keras.layers.Reshape((1, x.shape[-1]))(x)  # Reshape to fit LSTM input shape
-
-    
-#     # Additional pooling and dropout for further regularization
-#    #x = tf.keras.layers.MaxPool1D(padding='same')(x)
-#     #x = tf.keras.layers.Dropout(0.5)(x)
-#     # (Optional: BatchNorm, more Dropout, or GlobalAveragePooling can be tried for further regularization)
-
-#     # Add LSTM layers to capture temporal dependencies in the sequence data
-#     # x = tf.keras.layers.LSTM(32, return_sequences=True,  kernel_regularizer=tf.keras.regularizers.l2(1e-4) )(x)  # First LSTM layer
-#     # x = tf.keras.layers.Dropout(0.2)(x)
-#     # x = tf.keras.layers.LSTM(16, return_sequences=False,  kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)  # Second LSTM layer
-#     # x = tf.keras.layers.Dropout(0.2)(x)
-
-#     x = tf.keras.layers.LSTM(
-#         GLOBAL_SETTINGS["lstm_units"][0],
-#         return_sequences=True,
-#         kernel_regularizer=tf.keras.regularizers.l2(1e-4)
-#     )(x)
-#     x = tf.keras.layers.LSTM(
-#         GLOBAL_SETTINGS["lstm_units"][1],
-#         return_sequences=False,
-#         kernel_regularizer=tf.keras.regularizers.l2(1e-4)
-#     )(x)
-#     x = tf.keras.layers.Dropout(0.3)(x)
-
-#     # Dense layers for final regression output
-#     x = tf.keras.layers.Dense(
-#         GLOBAL_SETTINGS["dense_size"], 
-#         activation='relu', 
-#         kernel_regularizer=tf.keras.regularizers.l2(1e-4)
-#     )(x)
-#     output1 = tf.keras.layers.Dense(1, activation='linear')(x)  # Output layer for regression
-
-#     # Compile the model
-#     model = tf.keras.Model(inputs=inp, outputs=output1)
-
-# ## use elarning rate decay for better generalization    
-#     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
-#         initial_learning_rate = GLOBAL_SETTINGS["learning_rate"],
-#         decay_steps = 10000,
-#         decay_rate = 0.96,
-#         staircase=False,
-#         name="ExponentialDecay",
-#     )
-#     optimizer = tf.keras.optimizers.Adam(
-#         learning_rate=lr_schedule,#GLOBAL_SETTINGS["learning_rate"],
-#         epsilon=1e-6, 
-#         clipnorm=GLOBAL_SETTINGS["clip_norm"]
-#     )
-    
-
-#     # optimizer = tf.keras.optimizers.Adam(
-#     #     learning_rate=GLOBAL_SETTINGS["learning_rate"],
-#     #     epsilon=1e-3, 
-#     #     clipnorm=GLOBAL_SETTINGS["clip_norm"]
-#     # )
-#     model.compile(loss='mse', optimizer=optimizer, metrics=['mse'])
-
-#     # Early stopping to prevent overfitting (restores best weights)
-#     es = tf.keras.callbacks.EarlyStopping(
-#         monitor='val_loss', mode='min', 
-#         verbose=1, patience=15, restore_best_weights=True
-#     )
-
-#     # Shuffle training data to ensure randomness in each run
-#     idx = tf.random.shuffle(tf.range(tf.shape(X_train)[0]))
-#     X_train = tf.gather(X_train, idx)
-#     Y_train = tf.gather(Y_train, idx)
-
-#     # Train the model
-#     history = model.fit(
-#         X_train, Y_train, validation_data=(X_val, Y_val),  
-#         epochs=GLOBAL_SETTINGS["epochs"], 
-#         verbose=1,  # 0: silent, 1: progress bar, 2: one line per epoch
-#         batch_size=GLOBAL_SETTINGS["batch_size"], callbacks=[es]
-#     )
-    
-#     return model, history
 
 def predict_distribution(X, model, n):
     """
@@ -323,7 +178,7 @@ def simulate_testset(
     - obs1: true values (reshaped)
     - inimax: number of initializations
     - sim_members: predictions from all ensemble members
-    - sim_members_uncertainty: uncertainty array (mean ± 1.96*std)
+    - sim_members_uncertainty: uncertainty array (mean +/- 1.96*std)
     - sim_mean_uncertainty: mean uncertainty across ensemble
     - final_loss: training loss curve of median model
     - final_val_loss: validation loss curve of median model

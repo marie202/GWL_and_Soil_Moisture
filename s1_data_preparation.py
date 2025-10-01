@@ -52,23 +52,23 @@ def read_and_process_data(file_path, columns_to_keep, target_column="GWL"):
         exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0')
     except (OSError, IOError) as e:
         if "Communication error" in str(e) or "errno 70" in str(e).lower():
-            print(f"🔄 HPC I/O issue for {os.path.basename(file_path)}, trying Python engine...")
+            print(f"[~] HPC I/O issue for {os.path.basename(file_path)}, trying Python engine...")
             try:
                 # Strategy 2: Use python engine (slower but more reliable in containers)
                 exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0', engine='python')
-                print(f"✓ Successfully read {os.path.basename(file_path)} using Python engine")
+                print(f"[OK] Successfully read {os.path.basename(file_path)} using Python engine")
             except Exception as e2:
                 try:
                     # Strategy 3: Read without index_col first, then process
                     exp_data = pd.read_csv(file_path, skipinitialspace=True, engine='python')
                     if 'Unnamed: 0' in exp_data.columns:
                         exp_data = exp_data.drop(columns=['Unnamed: 0'])
-                    print(f"✓ Successfully read {os.path.basename(file_path)} using Python engine (no index_col)")
+                    print(f"[OK] Successfully read {os.path.basename(file_path)} using Python engine (no index_col)")
                 except Exception as e3:
-                    print(f"❌ All CSV reading strategies failed for {file_path}")
-                    print(f"❌ Original error: {e}")
-                    print(f"❌ Python engine error: {e2}")  
-                    print(f"❌ Final attempt error: {e3}")
+                    print(f"[X] All CSV reading strategies failed for {file_path}")
+                    print(f"[X] Original error: {e}")
+                    print(f"[X] Python engine error: {e2}")  
+                    print(f"[X] Final attempt error: {e3}")
                     raise e
         else:
             raise e
@@ -131,7 +131,7 @@ def scaler_statics_global(input_dir, static_cols, columns_to_keep):
     """
     all_static_data = []
     files_found = glob.glob(input_dir)
-    print(f"📁 scaler_statics_global: Found {len(files_found)} files with pattern: {input_dir}")
+    print(f"[F] scaler_statics_global: Found {len(files_found)} files with pattern: {input_dir}")
     
     if not files_found:
         raise ValueError(f"No files found with pattern: {input_dir}. Check if the input directory path is correct.")
@@ -142,15 +142,15 @@ def scaler_statics_global(input_dir, static_cols, columns_to_keep):
             if df is not None and not df.empty and len(df) > 0:
                 static_row = df[static_cols].iloc[0]
                 all_static_data.append(static_row)
-                print(f"✓ Processed static data from: {os.path.basename(file)}")
+                print(f"[OK] Processed static data from: {os.path.basename(file)}")
             else:
-                print(f"⚠️ Skipped empty file: {os.path.basename(file)}")
+                print(f"[!] Skipped empty file: {os.path.basename(file)}")
         except Exception as e:
-            print(f"⚠️ Error processing {os.path.basename(file)}: {e}")
+            print(f"[!] Error processing {os.path.basename(file)}: {e}")
             continue
 
     static_df = pd.DataFrame(all_static_data)
-    print(f"📊 Created static DataFrame with {len(static_df)} rows and {len(static_df.columns) if not static_df.empty else 0} columns")
+    print(f"[I] Created static DataFrame with {len(static_df)} rows and {len(static_df.columns) if not static_df.empty else 0} columns")
     
     # Safety check: ensure we have data to fit the scaler
     if static_df.empty or len(static_df) == 0:
@@ -329,19 +329,19 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
             X_train = np.concatenate((X_train, X_train_interim), axis=0)
             Y_train = np.concatenate((Y_train, Y_train_interim), axis=0)
         else:
-            print(f"⚠️  Skipping {well_id} train data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            print(f"[!]  Skipping {well_id} train data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
             
         if X_val_interim.size > 0 and X_val_interim.ndim == 3:
             X_val = np.concatenate((X_val, X_val_interim), axis=0)
             Y_val = np.concatenate((Y_val, Y_val_interim), axis=0)
         else:
-            print(f"⚠️  Skipping {well_id} val data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            print(f"[!]  Skipping {well_id} val data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
             
         if X_opt_interim.size > 0 and X_opt_interim.ndim == 3:
             X_opt = np.concatenate((X_opt, X_opt_interim), axis=0)
             Y_opt = np.concatenate((Y_opt, Y_opt_interim), axis=0)
         else:
-            print(f"⚠️  Skipping {well_id} opt data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            print(f"[!]  Skipping {well_id} opt data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
 
         # Save to dictionaries
 
@@ -365,83 +365,6 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
     if X_val.shape[0] == 0:
         raise ValueError(f"No validation data available after processing. Window size {GLOBAL_SETTINGS['window_size']} might be too large for the available data.")
         
-    print(f"✓ Data pipeline completed: Train={X_train.shape}, Val={X_val.shape}, Opt={X_opt.shape}")
+    print(f"[OK] Data pipeline completed: Train={X_train.shape}, Val={X_val.shape}, Opt={X_opt.shape}")
 
     return X_train, Y_train, X_val, Y_val, X_opt, Y_opt, ScalerData_dict, ValData_dict, OptData_dict, TestData_dict
-
-# def process_data_pipeline(input_dir, columns_to_keep, GLOBAL_SETTINGS):
-#     """
-#     Process data from multiple files into sequential datasets for training, validation, and optimization.
-
-#     Parameters:
-#     - input_dir: str, directory containing the input files.
-#     - columns_to_keep: list, columns to retain from the dataset.
-#     - GLOBAL_SETTINGS: dict, settings for window size, test start, and test end.
-#     - scaler_x, scaler_y: scalers for feature and target normalization.
-
-#     Returns:
-#     - X_train, Y_train: numpy arrays for training data.
-#     - X_val, Y_val: numpy arrays for validation data.
-#     - X_opt, Y_opt: numpy arrays for optimization data.
-#     - ValData_dict, OptData_dict, TestData_dict: dictionaries containing validation, optimization, and test datasets.
-#     """
-
-#     # Initialize empty arrays and dictionaries
-#     X_train = np.empty((0, GLOBAL_SETTINGS["window_size"], len(columns_to_keep) - 1))
-#     X_val = np.empty((0, GLOBAL_SETTINGS["window_size"], len(columns_to_keep) - 1))
-#     X_opt = np.empty((0, GLOBAL_SETTINGS["window_size"], len(columns_to_keep) - 1))
-#     Y_train, Y_val, Y_opt = [], [], []
-#     ScalerData_dict, ValData_dict, OptData_dict, TestData_dict = {}, {}, {}, {}
-
-#     for file in glob.glob(input_dir):
-#         # Read and preprocess data for this well
-#         interim_data = read_and_process_data(file, columns_to_keep)
-#         well_id = os.path.basename(file).split('_')[0]
-
-#         # Scale data for this well
-#         scaler_x, scaler_y, interim_data_n = scale_dataset_indiv(interim_data, target_column="GWL")
-
-#         # Split data into training, validation, optimization, and test sets
-#         TrainingData, ValData, ValData_ext, OptData, OptData_ext, TestData, TestData_ext = split_data(
-#             interim_data, 
-#             GLOBAL_SETTINGS["window_size"], 
-#             GLOBAL_SETTINGS["test_start"], 
-#             GLOBAL_SETTINGS["test_end"]
-#         )
-#         TrainingData_n, ValData_n, ValData_ext_n, OptData_n, OptData_ext_n, TestData_n, TestData_ext_n = split_data(
-#             interim_data_n, 
-#             GLOBAL_SETTINGS["window_size"], 
-#             GLOBAL_SETTINGS["test_start"], 
-#             GLOBAL_SETTINGS["test_end"]
-#         )
-
-#         # Convert to sequences for model input
-#         X_train_interim, Y_train_interim = to_sequential(TrainingData_n, GLOBAL_SETTINGS["window_size"])
-#         X_val_interim, Y_val_interim = to_sequential(ValData_n, GLOBAL_SETTINGS["window_size"])
-#         X_opt_interim, Y_opt_interim = to_sequential(OptData_n, GLOBAL_SETTINGS["window_size"])
-#         X_test_interim, Y_test_interim = to_sequential(TestData_n, GLOBAL_SETTINGS["window_size"])
-
-#         # Add to global arrays
-#         X_train = np.concatenate((X_train, X_train_interim), axis=0)
-#         Y_train = np.concatenate((Y_train, Y_train_interim), axis=0)
-#         X_val = np.concatenate((X_val, X_val_interim), axis=0)
-#         Y_val = np.concatenate((Y_val, Y_val_interim), axis=0)
-#         X_opt = np.concatenate((X_opt, X_opt_interim), axis=0)
-#         Y_opt = np.concatenate((Y_opt, Y_opt_interim), axis=0)
-
-#         # Store per-well data for later analysis or inverse-scaling
-#         ScalerData_dict[f'all_Dataframe_{well_id}'] = interim_data
-#         ValData_dict[f'obs_Dataframe_{well_id}'] = ValData
-#         ValData_dict[f'X_val_{well_id}'] = X_val_interim
-#         ValData_dict[f'Y_val_{well_id}'] = Y_val_interim
-
-#         OptData_dict[f'obs_Dataframe_{well_id}'] = OptData
-#         OptData_dict[f'X_opt_{well_id}'] = X_opt_interim
-#         OptData_dict[f'Y_opt_{well_id}'] = Y_opt_interim
-
-#         TestData_dict[f'obs_Dataframe_{well_id}'] = TestData
-#         TestData_dict[f'X_test_{well_id}'] = X_test_interim
-#         TestData_dict[f'Y_test_{well_id}'] = Y_test_interim
-
-#     # Returns: arrays for model training, plus dicts for per-well access
-#     return X_train, Y_train, X_val, Y_val, X_opt, Y_opt, ScalerData_dict, ValData_dict, OptData_dict, TestData_dict

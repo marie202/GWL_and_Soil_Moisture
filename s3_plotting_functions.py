@@ -50,53 +50,6 @@ def plot_loss_curves(model_dir, BL_abbr, show_plot=False):
         print(f"[WARNING] Plotting error in plot_loss_curves: {e}")
 
 
-# def plot_r2_rmse_boxplots(df, model_dir, fontsize=16, show_plot=False):
-#     """
-#     Plots boxplots for R2 and RMSE from a scores DataFrame and saves the figure.
-#     Args:
-#         df (pd.DataFrame): DataFrame with 'R2' and 'RMSE' columns.
-#         model_dir (str): Directory to save the plot.
-#         fontsize (int): Font size for plot labels.
-#         show_plot (bool): Whether to display the plot with plt.show().
-#     """
-#     fig, ax = plt.subplots(1, 2, figsize=(8, 5))
-
-#     # R2 boxplot
-#     sns.boxplot(
-#         y=df['R2'], width=0.5, color="#FFD7DF",
-#         ax=ax[0],
-#         boxprops=dict(edgecolor="black", linewidth=1.5),
-#         whiskerprops=dict(color="black", linewidth=1.5),
-#         capprops=dict(color="black", linewidth=1.5),
-#         medianprops=dict(color="#244062", linewidth=2)
-#     )
-#     # Show R2 summary statistics on the plot
-#     s = f"R2 \nmedian = {round(df['R2'].median(),2)}\nmax = {round(df['R2'].max(),2)}\nmin = {round(df['R2'].min(),2)}"
-#     ax[0].text(0.6, -0.025, s, bbox=dict(facecolor='white'), fontsize=fontsize)
-#     ax[0].set_ylabel("R2", fontsize=fontsize)
-#     ax[0].tick_params(axis='both', labelsize=fontsize-2)
-
-#     # RMSE boxplot
-#     sns.boxplot(
-#         y=df['RMSE'], width=0.5, color="#FFD7DF",
-#         ax=ax[1],
-#         boxprops=dict(edgecolor="black", linewidth=1.5),
-#         whiskerprops=dict(color="black", linewidth=1.5),
-#         capprops=dict(color="black", linewidth=1.5),
-#         medianprops=dict(color="#244062", linewidth=2)
-#     )
-#     # Show RMSE summary statistics on the plot
-#     s = f"RMSE \nmedian = {round(df['RMSE'].median(),2)}\nmax = {round(df['RMSE'].max(),2)}\nmin = {round(df['RMSE'].min(),2)}"
-#     ax[1].text(0.6, 0.035, s, bbox=dict(facecolor='white'), fontsize=fontsize)
-#     ax[1].set_ylabel("RMSE", fontsize=fontsize)
-#     ax[1].tick_params(axis='both', labelsize=fontsize-2)
-
-#     plt.tight_layout()
-#     plt.savefig(f"{model_dir}/boxplot_r2_rmse.png", dpi=300)
-#     if show_plot:
-#         plt.show()
-#     plt.close()
-
 
 def plot_simulation_vs_observed(TestData, scores, sim, obs, sim_mean_uncertainty, sim_members, WELL_ID, inimax, GLOBAL_SETTINGS, BL_abbr, save_fig=False):
     """
@@ -233,9 +186,7 @@ def simulate_plot_wells_testset_conf_int(well_ids, TestData_dict, GLOBAL_SETTING
         # Plot results
         plt.figure(figsize=(20, 6))
         fontsize = 17
-       # for ini in range(inimax):
-       #     sim_runs = np.asarray(sim_members[:, ini].reshape(-1, 1))
-       #     plt.plot(TestData_cut.index, sim_members[:, ini], linewidth=1, color="grey")
+
 
         try:
             plt.fill_between(TestData_cut.index, 
@@ -244,7 +195,7 @@ def simulate_plot_wells_testset_conf_int(well_ids, TestData_dict, GLOBAL_SETTING
                     #edgecolor = (1,0.7,0,0.7)
                 )
 
-      #  plt.plot(TestData_cut.index, sim_runs, linewidth=1, color="grey", label="Simulation runs")
+     
             plt.plot(TestData_cut.index, sim, '#EA3358', label="Simulated Median", linewidth=1.7)
             plt.plot(TestData_cut.index, obs, 'k', label="Observed Data", linewidth=1.7, alpha=0.9)
             plt.title(f"CNN Model Run: {BL_abbr}{WELL_ID}", size=fontsize+2, fontweight='bold')
@@ -271,7 +222,6 @@ def simulate_plot_wells_testset_conf_int(well_ids, TestData_dict, GLOBAL_SETTING
             GLOBAL_SETTINGS["batch_size"])
             
             plt.figtext(0.849, 0.45, s1, bbox=dict(facecolor='white'), fontsize=fontsize)
-           # plt.figtext(0.872, 0.14, s2, bbox=dict(facecolor='white'), fontsize=fontsize)
             plt.legend(fontsize=fontsize, bbox_to_anchor=(1.21, 1), loc='upper right', fancybox=False, framealpha=1, edgecolor='k')
               # ticks
             plt.tick_params(axis='both', labelsize=fontsize-2)  # Change font size of both x and y ticks
@@ -371,9 +321,7 @@ def compute_and_save_shap_values(median_model, X_train, X_test_all, model_dir, c
         logging.getLogger("shap.explainers._kernel").setLevel(logging.ERROR)
 
     # Compute SHAP values
-    # background = X_train
     # # Use a smaller background set
-    #background = X_train[np.random.choice(X_train.shape[0], 100, replace=False)]
     background = X_train[np.random.choice(X_train.shape[0], min(nsamples, X_train.shape[0]), replace=False)]
     X_test_last = X_test_all[:, -1, :]  # shape: (samples, features)
     background_last = background[:, -1, :]
@@ -381,12 +329,10 @@ def compute_and_save_shap_values(median_model, X_train, X_test_all, model_dir, c
     explainer = shap.KernelExplainer(lambda x: median_model.predict(x.reshape((x.shape[0], 1, x.shape[1]))), background_last)
     print("Explainer created")
     shap_values = explainer.shap_values(X_test_last, nsamples=nsamples)
-    #shap_values = e.shap_values(X_test)
+
     # Reshape for saving
     shap_vals = shap_values[:,:,0]# remove last dimension
-    #shap_vals = np.asarray(shap_values[:,:,:,0]) # remove last dimension
-    #shap_vals = shap_vals.reshape(-1, shap_vals.shape[-1])
-    #x = X_test.reshape(-1, X_test.shape[-1])
+
     # Save to file
     output_path = os.path.join(model_dir, f"shapvalues.txt")
     with open(output_path, "w") as f:
@@ -586,25 +532,7 @@ def compute_and_save_shap_values_robust(median_model, X_train, X_test_all, model
 # )
 
 
-#simple code that workd: 
-# # Use a smaller background set
-# background = X_train[np.random.choice(X_train.shape[0], min(100, X_train.shape[0]), replace=False)]
-# X_test_last = X_test_all[:, -1, :]  # shape: (samples, features)
-# background_last = background[:, -1, :]
 
-# explainer = shap.KernelExplainer(lambda x: median_model.predict(x.reshape((x.shape[0], 1, x.shape[1]))), background_last)
-# shap_values = explainer.shap_values(X_test_last, nsamples=100)
-# plt.figure(figsize=(15, 5))
-
-
-# shap.summary_plot(shap_values[:,:,0], X_test_last, feature_names=columns_to_keep, show=False)
-
-# # plt.title(f"SHAP Values for CNN, all wells")
-# plt.xlabel("SHAP value", fontsize=15)
-
-# # plt.savefig(f"{model_dir}/"+"shap_values_"+str(len(columns_to_keep)-1)+'_params.png', dpi=300)            
-# #plt.close()   
-# plt.show()
 
 def plot_shap_from_txt(txt_path, columns_to_keep, model_dir, custom_labels=None, show_plot=True):
     """
