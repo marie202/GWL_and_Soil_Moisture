@@ -31,8 +31,7 @@ GWL_and_Soil_Moisture/
 ├── s1_data_preparation.py           # Data loading and preprocessing utilities
 ├── s2_model_utils.py                # Model architecture and training helper functions
 ├── s3_plotting_functions.py         # Functions for evaluation and visualization
-├── s4_bayesian_opt.py               # Bayesian optimization helper functions
-├── s5_optuna_opt.py                 # Optuna optimization utilities
+├── s4_optuna_opt.py                 # Optuna optimization utilities
 │
 ├── gw_env.yml                       # Conda environment file with dependencies
 ├── LICENSE                          # MIT License
@@ -59,7 +58,6 @@ conda activate gw_env
 * **scikit-learn** - Machine learning utilities
 * **Matplotlib**, **seaborn** - Data visualization
 * **Optuna** - Hyperparameter optimization framework
-* **Bayesian Optimization** - Alternative optimization approach
 * **SHAP** - Model interpretability and feature importance
 * **SciPy** - Scientific computing 
 
@@ -81,7 +79,7 @@ conda activate gw_env
    python 02_opti_hyperparams_optuna.py
    ```
 
-The utility scripts (`s1-s5`) contain modular functions that are imported and used within the main scripts. 
+The utility scripts (`s1-s4`) contain modular functions that are imported and used within the main scripts. 
 
 ---
 
@@ -91,7 +89,7 @@ This project is open-source under the [MIT License](LICENSE). Credit is due to t
 
 ---
 
-## Data Avaibality
+## Data Availability
 
 
 ### Groundwater Level Data

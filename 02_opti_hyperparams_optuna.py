@@ -31,7 +31,7 @@ random.seed(1 + 347823)
 from s1_data_preparation import *
 from s2_model_utils import *
 from s3_plotting_functions import *
-from s5_optuna_opt import objective  # Import the objective function
+from s4_optuna_opt import objective  # Import the objective function
 
 # --- Configuration ---
 input_dir = "data_filtered_anthro/*.csv"
@@ -49,11 +49,11 @@ else:
 
 print("This local version will be faster but less comprehensive than HPC full optimization")
 
-# Update s5_optuna_opt.py to use selected files
-import s5_optuna_opt
+# Update s4_optuna_opt.py to use selected files
+import s4_optuna_opt
 # Pass the list of selected files directly
-s5_optuna_opt.INPUT_DIR = None  # Will be ignored when using file list
-s5_optuna_opt.SELECTED_FILES_LIST = selected_files  # Use the selected files
+s4_optuna_opt.INPUT_DIR = None  # Will be ignored when using file list
+s4_optuna_opt.SELECTED_FILES_LIST = selected_files  # Use the selected files
 
 # Features to use for training (last entry must be 'GWL')
 columns_to_keep = [
@@ -72,8 +72,8 @@ columns_to_keep = [
 ]
 print("Columns to train on: ", columns_to_keep)
 
-# Update columns in s5_optuna_opt.py
-s5_optuna_opt.COLUMNS_TO_KEEP = columns_to_keep
+# Update columns in s4_optuna_opt.py
+s4_optuna_opt.COLUMNS_TO_KEEP = columns_to_keep
 
 static_cols = [
     'elevation_msl',
@@ -82,8 +82,8 @@ static_cols = [
     'kf_remap_number',  # Note: changed from 'kf_remap_number' to match your s4 script
 ] 
 
-# Update static cols in s5_optuna_opt.py
-s5_optuna_opt.STATIC_COLS = static_cols
+# Update static cols in s4_optuna_opt.py
+s4_optuna_opt.STATIC_COLS = static_cols
 
 # List well IDs from selected files
 well_ids = [os.path.basename(f).split('_')[0] for f in selected_files]
