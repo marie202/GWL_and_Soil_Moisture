@@ -12,10 +12,7 @@ import os, glob
 import pandas as pd
 import datetime
 from scipy import stats
-import matplotlib.pyplot as plt
-from uncertainties import unumpy
-import geopandas as gpd
-import random, shutil
+import shutil
 import pickle
 import tempfile
 
@@ -37,7 +34,7 @@ from optuna.samplers import TPESampler
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
-import shap
+# import shap
 
 # List available GPUs (for info/debug)
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -57,7 +54,7 @@ COLUMNS_TO_KEEP = [
     'elevation_msl',
     'MW_muGOK',
     'distance_to_waterwork_km',
-    'kf_remapped',
+    'kf_remap_number',
     'GWL'
 ]
 
@@ -65,7 +62,7 @@ STATIC_COLS = [
     'elevation_msl',
     'MW_muGOK',
     'distance_to_waterwork_km',
-    'kf_remapped',
+    'kf_remap_number',
 ]
 
 INPUT_DIR = "data_filtered_anthro/*.csv"
@@ -86,12 +83,12 @@ def objective(trial):
     Only optimizes: windowsize, densesize, batchsize, filters
     """
     # Suggest only the 4 hyperparameters to optimize
-    densesize_int = trial.suggest_int('densesize', 8, 256, step=8)
+    densesize_int = trial.suggest_int('densesize', 48, 256, step=8)
     windowsize_int = trial.suggest_int('windowsize', 30, 80, step=2)
     #batchsize_int = trial.suggest_categorical('batchsize', [16, 32, 64, 128])
-    batchsize_int = trial.suggest_categorical('batchsize', [16, 32, 64, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480, 512, 576]
+    batchsize_int = trial.suggest_categorical('batchsize', [64, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480, 494, 512, 576]
 )
-    filters_int = trial.suggest_int('filters', 16, 256, step=8)
+    filters_int = trial.suggest_int('filters', 32, 256, step=8)
     
     print(f"\nTrial {trial.number}:")
     print(f"densesize: {densesize_int}, windowsize: {windowsize_int}")

@@ -25,8 +25,12 @@ ORCIDs of authors:
 ```
 GWL_and_Soil_Moisture/
 │
-├── 01_CNN_LSTM.py                    # Main model training script
-├── 02_opti_hyperparams_optuna.py    # Hyperparameter optimization using Optuna
+├── 1_1_CNN_LSTM.py                  # Main CNN-LSTM training script
+├── 1_2_OPTUNA_CNN_LSTM.py           # Optuna search for CNN-LSTM
+├── 2_1_CNN.py                       # CNN benchmark for soil moisture-only input
+├── 2_2_OPTUNA_CNN.py                # Optuna search for CNN-only benchmark
+├── 3_1_ANN.py                       # ANN baseline/benchmark experiment
+├── 3_2_OPTUNA_ANN.py                # Optuna search for ANN baseline
 │
 ├── s1_data_preparation.py           # Data loading and preprocessing utilities
 ├── s2_model_utils.py                # Model architecture and training helper functions
@@ -67,17 +71,34 @@ conda activate gw_env
 
 ## How to Run
 
-1. **Train the model**
-   Run the main training script:
-
+1. **Train the CNN-LSTM (full feature set)**
    ```bash
-   python 01_CNN_LSTM.py
+   python 1_1_CNN_LSTM.py
    ```
 
-2. **Optimize hyperparameters : Optuna optimization**
+2. **Train the CNN soil-moisture benchmark**
    ```bash
-   python 02_opti_hyperparams_optuna.py
+   python 2_1_CNN.py
    ```
+
+3. **Train the ANN baseline**
+   ```bash
+   python 3_1_ANN.py
+   ```
+
+4. **Hyperparameter optimization (Optuna)**
+   - CNN-LSTM search:
+     ```bash
+     python 1_2_OPTUNA_CNN_LSTM.py
+     ```
+   - CNN-only search:
+     ```bash
+     python 2_2_OPTUNA_CNN.py
+     ```
+   - ANN search:
+     ```bash
+     python 3_2_OPTUNA_ANN.py
+     ```
 
 The utility scripts (`s1-s4`) contain modular functions that are imported and used within the main scripts. 
 

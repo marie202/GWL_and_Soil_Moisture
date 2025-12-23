@@ -1,5 +1,5 @@
-# LOCAL VERSION - HYPERPARAM OPTIMIZATION WITH OPTUNA (50 random files)
-# Based on 02_opti_hyperparams_optuna.py but uses only 50 random files for local testing
+# HYPERPARAM OPTIMIZATION WITH OPTUNA
+# Based on the original Bayesian optimization script but using Optuna with pruning
 
 ## First, lets import all needed libraries
 
@@ -11,11 +11,11 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 import tensorflow as tf
-import shap
 from scipy import stats
 import json
 import pickle
 import datetime
+from pathlib import Path
 
 # Optuna imports
 import optuna
@@ -28,37 +28,33 @@ tf.random.set_seed(1 + 63493)
 np.random.seed(1 + 347823)
 random.seed(1 + 347823)
 
-from s1_data_preparation import *
-from s2_model_utils import *
-from s3_plotting_functions import *
-from s4_optuna_opt import objective  # Import the objective function
+# from s1_data_preparation import *
+# from s2_model_utils import *
+# from s3_plotting_functions import *
+from s5_optuna_opt import objective  # Import the objective function
 
 # --- Configuration ---
-input_dir = "data_filtered_anthro/*.csv"
+# Anchor all relative paths to this script's directory so output isn't affected
+# by the current working directory (e.g., SLURM job scripts).
+BASE_DIR = Path(__file__).resolve().parent
 
-# LOCAL VERSION: Use 50 random files for faster local testing
+input_dir = str(BASE_DIR / "data_217/*.csv")
+
+# Use ALL files for optimization (better quality, more robust results)
 all_files = glob.glob(input_dir)
-print(f"Found {len(all_files)} total files")
+print(f"Using ALL {len(all_files)} files for optimization")
+print("This will take longer but gives more robust hyperparameter selection")
 
-if len(all_files) > 50:
-    selected_files = random.sample(all_files, 50)
-    print(f"🖥️  LOCAL VERSION: Randomly selected 50 files for optimization (instead of {len(all_files)})")
-else:
-    selected_files = all_files
-    print(f"Using all {len(selected_files)} files (less than 50 available)")
-
-print("This local version will be faster but less comprehensive than HPC full optimization")
-
-# Update s4_optuna_opt.py to use selected files
-import s4_optuna_opt
-# Pass the list of selected files directly
-s4_optuna_opt.INPUT_DIR = None  # Will be ignored when using file list
-s4_optuna_opt.SELECTED_FILES_LIST = selected_files  # Use the selected files
+# Update s5_optuna_opt.py to use all files
+import s5_optuna_opt
+s5_optuna_opt.INPUT_DIR = input_dir
+s5_optuna_opt.SELECTED_FILES_LIST = None  # Use all files, no filtering
 
 # Features to use for training (last entry must be 'GWL')
 columns_to_keep = [
     'tas_3x3_mean',
-    'pr_3x3_mean',
+    'pr_3x3_sum',
+    #'pr_3x3_sum_logit',
     'hurs_3x3_mean',
     #'soil_moisture_xy_general',
     'soil_mois_composite_3x3_mean_0-30',
@@ -72,8 +68,8 @@ columns_to_keep = [
 ]
 print("Columns to train on: ", columns_to_keep)
 
-# Update columns in s4_optuna_opt.py
-s4_optuna_opt.COLUMNS_TO_KEEP = columns_to_keep
+# Update columns in s5_optuna_opt.py
+s5_optuna_opt.COLUMNS_TO_KEEP = columns_to_keep
 
 static_cols = [
     'elevation_msl',
@@ -82,11 +78,11 @@ static_cols = [
     'kf_remap_number',  # Note: changed from 'kf_remap_number' to match your s4 script
 ] 
 
-# Update static cols in s4_optuna_opt.py
-s4_optuna_opt.STATIC_COLS = static_cols
+# Update static cols in s5_optuna_opt.py
+s5_optuna_opt.STATIC_COLS = static_cols
 
-# List well IDs from selected files
-well_ids = [os.path.basename(f).split('_')[0] for f in selected_files]
+# List well IDs from all files
+well_ids = [os.path.basename(f).split('_')[0] for f in all_files]
 print(f"Total number of wells for optimization: {len(well_ids)}")
 
 # Global settings (similar to original, will be used as base for optimization)
@@ -99,18 +95,15 @@ GLOBAL_SETTINGS = {
     'learning_rate': 1e-5,
     'test_start': pd.to_datetime('2018-01-01', format='%Y-%m-%d'),
     'test_end': pd.to_datetime('2024-09-01', format='%Y-%m-%d'),
-    'num_cnn_layers': 5,
-    'lstm_units': [32, 16],
-    'model_dir_note': f"local_{len(selected_files)}files_v1"
+    'num_cnn_layers': 6,
+    'lstm_units': [64, 32],
+    'model_dir_note': f"optuna_allfiles_{len(all_files)}wells_v1_6layers_64_32"
 }
 
 # --- Prepare timestamped model directory ---
-timestamp = datetime.datetime.now().strftime("%d%m_%H%M")
-path = "model_runs/OptunaOpt"
-model_dir = os.path.join(
-    path,   
-    f"OptunaOpt_{timestamp}_CNN_LSTM_{GLOBAL_SETTINGS['num_cnn_layers']}layer_{len(columns_to_keep)}params_{GLOBAL_SETTINGS['model_dir_note']}"
-)
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+path = BASE_DIR / "model_runs" / "OptunaOpt"
+model_dir = path / f"OptunaOpt_{timestamp}_CNN_LSTM_{GLOBAL_SETTINGS['num_cnn_layers']}layer_{len(columns_to_keep)}params_{GLOBAL_SETTINGS['model_dir_note']}"
 os.makedirs(model_dir, exist_ok=True)
 print(f"✓ Results will be saved to: {model_dir}")
 print(f"✓ Timestamp: {timestamp}")
@@ -184,14 +177,12 @@ def save_study_progress(study):
     failed_trials = [t for t in all_trials if t['value'] is None]
     
     # Only save comprehensive trials log (single file with all trial info)
-    all_trials_file = os.path.join(model_dir, 'all_trials_log.json')
+    all_trials_file = model_dir / 'all_trials_log.json'
     print(f"📝 Writing {len(completed_trials)} completed + {len(failed_trials)} failed trials to: {all_trials_file}")
     
     with open(all_trials_file, 'w') as f:
         json.dump({
             'last_updated': datetime.datetime.now().isoformat(),
-            'environment': 'local',
-            'files_used': len(selected_files),
             'summary': {
                 'total_trials': len(study.trials),
                 'completed_trials': len(completed_trials),
@@ -203,12 +194,7 @@ def save_study_progress(study):
                 'value': study.best_value if study.best_trial else None,
                 'params': study.best_params if study.best_trial else None,
                 'marked_as': '🏆 BEST TRIAL 🏆'
-            } if study.best_trial else {
-                'number': None,
-                'value': None,
-                'params': None,
-                'marked_as': '❌ NO SUCCESSFUL TRIALS'
-            },
+            } if study.best_trial else None,
             'all_trials_ranked': completed_trials + failed_trials
         }, f, indent=2)
     
@@ -241,7 +227,6 @@ def create_study():
 # --- Hyperparameter Optimization with Optuna ---
 
 print("[Optuna] Starting hyperparameter optimization...")
-print(f"🖥️  LOCAL VERSION: Using {len(selected_files)} randomly selected files")
 
 # Create study
 study = create_study()
@@ -313,8 +298,6 @@ if study.best_trial:
     # Save only the simple best parameters file (second required file)
     best_params_simple = {
         'timestamp': datetime.datetime.now().isoformat(),
-        'environment': 'local',
-        'files_used': len(selected_files),
         'best_trial': {
             'number': study.best_trial.number,
             'score': study.best_value,
@@ -334,12 +317,12 @@ if study.best_trial:
         }
     }
     
-    best_params_file = os.path.join(model_dir, 'best_params.json')
+    best_params_file = model_dir / 'best_params.json'
     with open(best_params_file, 'w') as f:
         json.dump(best_params_simple, f, indent=2)
     
     print(f"\n--- Optimization completed ---")
-    print(f"All trials log: {os.path.join(model_dir, 'all_trials_log.json')}")
+    print(f"All trials log: {model_dir / 'all_trials_log.json'}")
     print(f"Best params: {best_params_file}")
 
 else:
@@ -348,9 +331,11 @@ else:
 print(f"\n[Optuna] All logs saved to: {model_dir}")
 print("[Optuna] Check progress in console output above")
 
+# No temporary files to clean up (using all files directly)
+
 # --- Add entry to master optimization log ---
-master_log_file = "model_runs/OptunaOpt/optimization_runs_log.json"
-os.makedirs("model_runs/OptunaOpt", exist_ok=True)
+master_log_file = BASE_DIR / "model_runs" / "OptunaOpt" / "optimization_runs_log.json"
+os.makedirs(master_log_file.parent, exist_ok=True)
 
 # Load existing log or create new one
 if os.path.exists(master_log_file):
@@ -364,7 +349,6 @@ if len(study.trials) > 0 and any(t.state == optuna.trial.TrialState.COMPLETE for
     run_entry = {
         "timestamp": timestamp,
         "directory": model_dir,
-        "environment": "local",
         "best_score": study.best_value,
         "best_params": dict(study.best_params),
         "n_trials": len(study.trials),
@@ -372,17 +356,16 @@ if len(study.trials) > 0 and any(t.state == optuna.trial.TrialState.COMPLETE for
         "n_pruned": len([t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]),
         "n_failed": len([t for t in study.trials if t.state == optuna.trial.TrialState.FAIL]),
         "files_used": len(well_ids),
-        "optimization_type": "local_50_random_files"
+        "optimization_type": "all_files"
     }
 else:
     run_entry = {
         "timestamp": timestamp,
         "directory": model_dir,
-        "environment": "local",
         "status": "failed - no successful trials",
         "n_trials": len(study.trials),
         "files_used": len(well_ids),
-        "optimization_type": "local_50_random_files"
+        "optimization_type": "all_files"
     }
 
 master_log["optimization_runs"].append(run_entry)
@@ -394,7 +377,3 @@ with open(master_log_file, 'w') as f:
 print(f"\n📝 Added run to master log: {master_log_file}")
 print(f"📁 This run's results: {model_dir}")
 print(f"🕐 Total optimization runs logged: {len(master_log['optimization_runs'])}")
-print(f"\n🖥️  LOCAL VERSION SUMMARY:")
-print(f"   - Used {len(selected_files)} randomly selected files (instead of {len(all_files)} total)")
-print(f"   - Results are less comprehensive but faster for local testing")
-print(f"   - For production runs, use the HPC version with all files")

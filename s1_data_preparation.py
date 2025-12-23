@@ -14,8 +14,8 @@ import pandas as pd
 import datetime
 from scipy import stats
 import matplotlib.pyplot as plt
-from uncertainties import unumpy
-import geopandas as gpd
+# Removed uncertainties package - not used in this module
+# Removed geopandas - not used in this module
 
 # Import MinMaxScaler so scaling functions are callable
 from sklearn.preprocessing import MinMaxScaler
@@ -48,29 +48,40 @@ def read_and_process_data(file_path, columns_to_keep, target_column="GWL"):
     """
     # Read the CSV file with HPC container compatibility
     try:
-        # Strategy 1: Standard read
-        exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0')
+        # Strategy 1: Read without index_col first, then drop 'Unnamed: 0' if it exists
+        exp_data = pd.read_csv(file_path, skipinitialspace=True)
+        # Drop 'Unnamed: 0' column if it exists (it's usually just a saved index we don't need)
+        if 'Unnamed: 0' in exp_data.columns:
+            exp_data = exp_data.drop(columns=['Unnamed: 0'])
     except (OSError, IOError) as e:
         if "Communication error" in str(e) or "errno 70" in str(e).lower():
-            print(f"[~] HPC I/O issue for {os.path.basename(file_path)}, trying Python engine...")
+            print(f"🔄 HPC I/O issue for {os.path.basename(file_path)}, trying Python engine...")
             try:
                 # Strategy 2: Use python engine (slower but more reliable in containers)
-                exp_data = pd.read_csv(file_path, skipinitialspace=True, index_col='Unnamed: 0', engine='python')
-                print(f"[OK] Successfully read {os.path.basename(file_path)} using Python engine")
+                exp_data = pd.read_csv(file_path, skipinitialspace=True, engine='python')
+                # Drop 'Unnamed: 0' column if it exists
+                if 'Unnamed: 0' in exp_data.columns:
+                    exp_data = exp_data.drop(columns=['Unnamed: 0'])
+                print(f"✓ Successfully read {os.path.basename(file_path)} using Python engine")
             except Exception as e2:
-                try:
-                    # Strategy 3: Read without index_col first, then process
-                    exp_data = pd.read_csv(file_path, skipinitialspace=True, engine='python')
-                    if 'Unnamed: 0' in exp_data.columns:
-                        exp_data = exp_data.drop(columns=['Unnamed: 0'])
-                    print(f"[OK] Successfully read {os.path.basename(file_path)} using Python engine (no index_col)")
-                except Exception as e3:
-                    print(f"[X] All CSV reading strategies failed for {file_path}")
-                    print(f"[X] Original error: {e}")
-                    print(f"[X] Python engine error: {e2}")  
-                    print(f"[X] Final attempt error: {e3}")
-                    raise e
+                print(f"❌ All CSV reading strategies failed for {file_path}")
+                print(f"❌ Original error: {e}")
+                print(f"❌ Python engine error: {e2}")  
+                raise e
         else:
+            raise e
+    except Exception as e:
+        # Catch any other exceptions (like KeyError for index_col)
+        try:
+            # Fallback: Try reading with Python engine
+            exp_data = pd.read_csv(file_path, skipinitialspace=True, engine='python')
+            # Drop 'Unnamed: 0' column if it exists
+            if 'Unnamed: 0' in exp_data.columns:
+                exp_data = exp_data.drop(columns=['Unnamed: 0'])
+            print(f"✓ Successfully read {os.path.basename(file_path)} using fallback method")
+        except Exception as e2:
+            print(f"❌ Error reading {file_path}: {e}")
+            print(f"❌ Fallback error: {e2}")
             raise e
     exp_data['Date'] = pd.to_datetime(exp_data['Date'])
     exp_data.set_index('Date', inplace=True)
@@ -126,12 +137,17 @@ def scaler_statics_global(input_dir, static_cols, columns_to_keep):
         columns_to_keep (list): Columns to keep when processing files.
 
     Returns:
-        scaler_static (MinMaxScaler): Fitted scaler for static features.
-        static_df (pd.DataFrame): Combined static feature values for all wells.
+        scaler_static (MinMaxScaler or None): Fitted scaler for static features, or None if static_cols is empty.
+        static_df (pd.DataFrame or None): Combined static feature values for all wells, or None if static_cols is empty.
     """
+    # Handle empty static_cols case
+    if not static_cols or len(static_cols) == 0:
+        print("📁 scaler_statics_global: No static columns specified, skipping static scaler creation.")
+        return None, None
+    
     all_static_data = []
     files_found = glob.glob(input_dir)
-    print(f"[F] scaler_statics_global: Found {len(files_found)} files with pattern: {input_dir}")
+    print(f"📁 scaler_statics_global: Found {len(files_found)} files with pattern: {input_dir}")
     
     if not files_found:
         raise ValueError(f"No files found with pattern: {input_dir}. Check if the input directory path is correct.")
@@ -142,15 +158,15 @@ def scaler_statics_global(input_dir, static_cols, columns_to_keep):
             if df is not None and not df.empty and len(df) > 0:
                 static_row = df[static_cols].iloc[0]
                 all_static_data.append(static_row)
-                print(f"[OK] Processed static data from: {os.path.basename(file)}")
+                print(f"✓ Processed static data from: {os.path.basename(file)}")
             else:
-                print(f"[!] Skipped empty file: {os.path.basename(file)}")
+                print(f"⚠️ Skipped empty file: {os.path.basename(file)}")
         except Exception as e:
-            print(f"[!] Error processing {os.path.basename(file)}: {e}")
+            print(f"⚠️ Error processing {os.path.basename(file)}: {e}")
             continue
 
     static_df = pd.DataFrame(all_static_data)
-    print(f"[I] Created static DataFrame with {len(static_df)} rows and {len(static_df.columns) if not static_df.empty else 0} columns")
+    print(f"📊 Created static DataFrame with {len(static_df)} rows and {len(static_df.columns) if not static_df.empty else 0} columns")
     
     # Safety check: ensure we have data to fit the scaler
     if static_df.empty or len(static_df) == 0:
@@ -277,34 +293,41 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
         well_id = os.path.basename(file).split('_')[0]
 
         # --- STATIC SCALING ---
-        interim_data_static = interim_data[static_cols].iloc[0:1]
-        interim_data_static_n = scaler_static.transform(interim_data_static)
+        if static_cols and len(static_cols) > 0 and scaler_static is not None:
+            interim_data_static = interim_data[static_cols].iloc[0:1]
+            interim_data_static_n = scaler_static.transform(interim_data_static)
 
-        # Apply scaled static values to all time steps
-        interim_data_scaled_statics = interim_data.copy()
-        for i, col in enumerate(static_cols):
-            interim_data_scaled_statics[col] = interim_data_static_n[0, i]
+            # Apply scaled static values to all time steps
+            interim_data_scaled_statics = interim_data.copy()
+            for i, col in enumerate(static_cols):
+                interim_data_scaled_statics[col] = interim_data_static_n[0, i]
 
-        # --- DYNAMIC + TARGET SCALING ---
-        dynamic_and_target_cols = [col for col in interim_data.columns if col not in static_cols]
-        interim_data_dynamic = interim_data_scaled_statics[dynamic_and_target_cols]
+            # --- DYNAMIC + TARGET SCALING ---
+            dynamic_and_target_cols = [col for col in interim_data.columns if col not in static_cols]
+            interim_data_dynamic = interim_data_scaled_statics[dynamic_and_target_cols]
 
-        scaler_x, scaler_y, interim_data_dynamic_n = scale_dataset_indiv(
-            interim_data_dynamic, target_column=target_column
-        )
+            scaler_x, scaler_y, interim_data_dynamic_n = scale_dataset_indiv(
+                interim_data_dynamic, target_column=target_column
+            )
 
-        # Reattach scaled static features
-        interim_data_static_n_full = pd.DataFrame(
-            np.repeat(interim_data_static_n, len(interim_data), axis=0),
-            columns=static_cols,
-            index=interim_data.index
-        )
-        interim_data_n = pd.concat([interim_data_dynamic_n, interim_data_static_n_full], axis=1)
+            # Reattach scaled static features
+            interim_data_static_n_full = pd.DataFrame(
+                np.repeat(interim_data_static_n, len(interim_data), axis=0),
+                columns=static_cols,
+                index=interim_data.index
+            )
+            interim_data_n = pd.concat([interim_data_dynamic_n, interim_data_static_n_full], axis=1)
 
-        # Reorder: dynamic + static + target
-        dynamic_cols = [col for col in interim_data_dynamic_n.columns if col != "GWL"]
-        ordered_cols = ["GWL"] + dynamic_cols + list(static_cols)
-        interim_data_n = interim_data_n[ordered_cols]
+            # Reorder: dynamic + static + target
+            dynamic_cols = [col for col in interim_data_dynamic_n.columns if col != "GWL"]
+            ordered_cols = ["GWL"] + dynamic_cols + list(static_cols)
+            interim_data_n = interim_data_n[ordered_cols]
+        else:
+            # No static columns - skip static scaling
+            # --- DYNAMIC + TARGET SCALING ONLY ---
+            scaler_x, scaler_y, interim_data_n = scale_dataset_indiv(
+                interim_data, target_column=target_column
+            )
 
 
         # --- SPLIT UN/SCALED DATA ---
@@ -329,19 +352,19 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
             X_train = np.concatenate((X_train, X_train_interim), axis=0)
             Y_train = np.concatenate((Y_train, Y_train_interim), axis=0)
         else:
-            print(f"[!]  Skipping {well_id} train data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            print(f"⚠️  Skipping {well_id} train data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
             
         if X_val_interim.size > 0 and X_val_interim.ndim == 3:
             X_val = np.concatenate((X_val, X_val_interim), axis=0)
             Y_val = np.concatenate((Y_val, Y_val_interim), axis=0)
         else:
-            print(f"[!]  Skipping {well_id} val data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            print(f"⚠️  Skipping {well_id} val data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
             
         if X_opt_interim.size > 0 and X_opt_interim.ndim == 3:
             X_opt = np.concatenate((X_opt, X_opt_interim), axis=0)
             Y_opt = np.concatenate((Y_opt, Y_opt_interim), axis=0)
         else:
-            print(f"[!]  Skipping {well_id} opt data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
+            print(f"⚠️  Skipping {well_id} opt data - insufficient data for window_size={GLOBAL_SETTINGS['window_size']}")
 
         # Save to dictionaries
 
@@ -365,6 +388,83 @@ def process_data_pipeline(input_dir, columns_to_keep, static_cols, GLOBAL_SETTIN
     if X_val.shape[0] == 0:
         raise ValueError(f"No validation data available after processing. Window size {GLOBAL_SETTINGS['window_size']} might be too large for the available data.")
         
-    print(f"[OK] Data pipeline completed: Train={X_train.shape}, Val={X_val.shape}, Opt={X_opt.shape}")
+    print(f"✓ Data pipeline completed: Train={X_train.shape}, Val={X_val.shape}, Opt={X_opt.shape}")
 
     return X_train, Y_train, X_val, Y_val, X_opt, Y_opt, ScalerData_dict, ValData_dict, OptData_dict, TestData_dict
+
+# def process_data_pipeline(input_dir, columns_to_keep, GLOBAL_SETTINGS):
+#     """
+#     Process data from multiple files into sequential datasets for training, validation, and optimization.
+
+#     Parameters:
+#     - input_dir: str, directory containing the input files.
+#     - columns_to_keep: list, columns to retain from the dataset.
+#     - GLOBAL_SETTINGS: dict, settings for window size, test start, and test end.
+#     - scaler_x, scaler_y: scalers for feature and target normalization.
+
+#     Returns:
+#     - X_train, Y_train: numpy arrays for training data.
+#     - X_val, Y_val: numpy arrays for validation data.
+#     - X_opt, Y_opt: numpy arrays for optimization data.
+#     - ValData_dict, OptData_dict, TestData_dict: dictionaries containing validation, optimization, and test datasets.
+#     """
+
+#     # Initialize empty arrays and dictionaries
+#     X_train = np.empty((0, GLOBAL_SETTINGS["window_size"], len(columns_to_keep) - 1))
+#     X_val = np.empty((0, GLOBAL_SETTINGS["window_size"], len(columns_to_keep) - 1))
+#     X_opt = np.empty((0, GLOBAL_SETTINGS["window_size"], len(columns_to_keep) - 1))
+#     Y_train, Y_val, Y_opt = [], [], []
+#     ScalerData_dict, ValData_dict, OptData_dict, TestData_dict = {}, {}, {}, {}
+
+#     for file in glob.glob(input_dir):
+#         # Read and preprocess data for this well
+#         interim_data = read_and_process_data(file, columns_to_keep)
+#         well_id = os.path.basename(file).split('_')[0]
+
+#         # Scale data for this well
+#         scaler_x, scaler_y, interim_data_n = scale_dataset_indiv(interim_data, target_column="GWL")
+
+#         # Split data into training, validation, optimization, and test sets
+#         TrainingData, ValData, ValData_ext, OptData, OptData_ext, TestData, TestData_ext = split_data(
+#             interim_data, 
+#             GLOBAL_SETTINGS["window_size"], 
+#             GLOBAL_SETTINGS["test_start"], 
+#             GLOBAL_SETTINGS["test_end"]
+#         )
+#         TrainingData_n, ValData_n, ValData_ext_n, OptData_n, OptData_ext_n, TestData_n, TestData_ext_n = split_data(
+#             interim_data_n, 
+#             GLOBAL_SETTINGS["window_size"], 
+#             GLOBAL_SETTINGS["test_start"], 
+#             GLOBAL_SETTINGS["test_end"]
+#         )
+
+#         # Convert to sequences for model input
+#         X_train_interim, Y_train_interim = to_sequential(TrainingData_n, GLOBAL_SETTINGS["window_size"])
+#         X_val_interim, Y_val_interim = to_sequential(ValData_n, GLOBAL_SETTINGS["window_size"])
+#         X_opt_interim, Y_opt_interim = to_sequential(OptData_n, GLOBAL_SETTINGS["window_size"])
+#         X_test_interim, Y_test_interim = to_sequential(TestData_n, GLOBAL_SETTINGS["window_size"])
+
+#         # Add to global arrays
+#         X_train = np.concatenate((X_train, X_train_interim), axis=0)
+#         Y_train = np.concatenate((Y_train, Y_train_interim), axis=0)
+#         X_val = np.concatenate((X_val, X_val_interim), axis=0)
+#         Y_val = np.concatenate((Y_val, Y_val_interim), axis=0)
+#         X_opt = np.concatenate((X_opt, X_opt_interim), axis=0)
+#         Y_opt = np.concatenate((Y_opt, Y_opt_interim), axis=0)
+
+#         # Store per-well data for later analysis or inverse-scaling
+#         ScalerData_dict[f'all_Dataframe_{well_id}'] = interim_data
+#         ValData_dict[f'obs_Dataframe_{well_id}'] = ValData
+#         ValData_dict[f'X_val_{well_id}'] = X_val_interim
+#         ValData_dict[f'Y_val_{well_id}'] = Y_val_interim
+
+#         OptData_dict[f'obs_Dataframe_{well_id}'] = OptData
+#         OptData_dict[f'X_opt_{well_id}'] = X_opt_interim
+#         OptData_dict[f'Y_opt_{well_id}'] = Y_opt_interim
+
+#         TestData_dict[f'obs_Dataframe_{well_id}'] = TestData
+#         TestData_dict[f'X_test_{well_id}'] = X_test_interim
+#         TestData_dict[f'Y_test_{well_id}'] = Y_test_interim
+
+#     # Returns: arrays for model training, plus dicts for per-well access
+#     return X_train, Y_train, X_val, Y_val, X_opt, Y_opt, ScalerData_dict, ValData_dict, OptData_dict, TestData_dict
